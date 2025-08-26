@@ -203,11 +203,18 @@ async def media_delivery(request: web.Request):
                             break
                 finally:
                     work_loads[client_id] -= 1
-            return web.Response(
+            resp = web.StreamResponse(
                 status=206 if range_header else 200,
-                body=stream_generator(),
                 headers=headers
             )
+            await resp.prepare(request)
+
+            async for chunk in stream_generator():
+                await resp.write(chunk)
+
+            await resp.write_eof()
+            return resp
+
             
         except (FileNotFound, InvalidHash):
             work_loads[client_id] -= 1
@@ -225,3 +232,4 @@ async def media_delivery(request: web.Request):
         error_id = secrets.token_hex(6)
         logger.error(f"Server error {error_id}: {e}", exc_info=True)
         raise web.HTTPInternalServerError(text=f"An unexpected server error occurred: {error_id}") from e
+
